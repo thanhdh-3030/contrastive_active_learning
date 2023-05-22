@@ -27,7 +27,7 @@ from selection_methods import query_samples
 # from config import *
 from sampler import SubsetSequentialSampler
 
-sys.path.append(".")
+# sys.path.append("./")
 
 
 parser = argparse.ArgumentParser()
@@ -37,16 +37,18 @@ parser.add_argument("-e","--no_of_epochs", type=int, default=222,
                     help="Number of epochs for the active learner")
 parser.add_argument("-m","--method_type", type=str, default="mobyv2al",
                     help="")
-parser.add_argument("-c","--cycles", type=int, default=10,
+parser.add_argument("-c","--cycles", type=int, default=7,
                     help="Number of active learning cycles")
-parser.add_argument("-r","--trials", type=int, default=5,
+parser.add_argument("-r","--trials", type=int, default=3,
                     help="Number of AL trials to average over the cycles")
 parser.add_argument("-t","--total", type=bool, default=False,
                     help="Training on the entire dataset")
 parser.add_argument("-s","--ssl", type=bool, default=True,
                     help="")
-parser.add_argument("-ss","--selection_subset", type=int, default=10000,
-                    help="This is the random pre-selection to avoid redundancy.")
+# parser.add_argument("-ss","--selection_subset", type=int, default=10000,
+#                     help="This is the random pre-selection to avoid redundancy.")
+parser.add_argument("-ss","--selection_subset", type=int, default=5000,
+                     help="This is the random pre-selection to avoid redundancy.")
 parser.add_argument("-la","--learner_architecture", type=str, default="resnet18",
                     help="")
 parser.add_argument("-b","--batch", type=int, default=128,
@@ -81,7 +83,7 @@ if __name__ == '__main__':
     '''
 
     results = open('results_'+str(args.method_type)+"_"+args.dataset +'_main'+str(args.cycles)+
-                    str(args.total)+'.txt','w')
+                    str(args.total)+'old_resnet.txt','w')
     print("Dataset: %s"%args.dataset)
     print("Method type:%s"%method)
     if args.total:
@@ -189,6 +191,7 @@ if __name__ == '__main__':
                                             pin_memory=True, drop_last=drop_flag)
 
             if (args.method_type == "mobyv2al"):
+                
                 # Interleave labelled and unlabelled batches.
                 if len(subset)>len(labeled_set):
                     interleaved_size = 2 * int(len(labeled_set)/BATCH) * BATCH

@@ -197,10 +197,10 @@ class ResNetEnc(nn.Module):
         # self.linear = nn.Linear(512*block.expansion, num_classes)
         # self.linear = nn.Linear(512, num_classes)
         # self.linear2 = nn.Linear(1000, num_classes)
-        self.smooth0 = self._make_smooth_layer(sblock, 64, num_sblocks[0])# **block_kwargs)
-        self.smooth1 = self._make_smooth_layer(sblock, 128, num_sblocks[1])# **block_kwargs)
-        self.smooth2 = self._make_smooth_layer(sblock, 256, num_sblocks[2])# **block_kwargs)
-        self.smooth3 = self._make_smooth_layer(sblock, 512, num_sblocks[3])# **block_kwargs)
+        # self.smooth0 = self._make_smooth_layer(sblock, 64, num_sblocks[0])# **block_kwargs)
+        # self.smooth1 = self._make_smooth_layer(sblock, 128, num_sblocks[1])# **block_kwargs)
+        # self.smooth2 = self._make_smooth_layer(sblock, 256, num_sblocks[2])# **block_kwargs)
+        # self.smooth3 = self._make_smooth_layer(sblock, 512, num_sblocks[3])# **block_kwargs)
         # self.smooth4 = self._make_smooth_layer(sblock, 512, num_sblocks[4], **block_kwargs)
 
     def _make_layer(self, block, planes, num_blocks, stride):
@@ -220,26 +220,26 @@ class ResNetEnc(nn.Module):
     #         channels = out_channels
     #     return nn.Sequential(*layers)
 
-    @staticmethod
-    def _make_smooth_layer(sblock, in_filters, num_blocks, **block_kwargs):
-        layers = []
-        for _ in range(num_blocks):
-            layers.append(sblock(in_filters=in_filters, **block_kwargs))
-        return nn.Sequential(*layers)
+    # @staticmethod
+    # def _make_smooth_layer(sblock, in_filters, num_blocks, **block_kwargs):
+    #     layers = []
+    #     for _ in range(num_blocks):
+    #         layers.append(sblock(in_filters=in_filters, **block_kwargs))
+    #     return nn.Sequential(*layers)
 
     def forward(self, x):
         out = F.relu(self.bn1(self.conv1(x)))
         out1 = self.layer1(out)
-        out1 = self.smooth0(out1)
+        # out1 = self.smooth0(out1)
 
         out2 = self.layer2(out1)
-        out2 = self.smooth1(out2)
+        # out2 = self.smooth1(out2)
 
         out3 = self.layer3(out2)
-        out3 = self.smooth2(out3)
+        # out3 = self.smooth2(out3)
 
         out4 = self.layer4(out3)
-        out4 = self.smooth3(out4)
+        # out4 = self.smooth3(out4)
 
         out = F.avg_pool2d(out4, self.avg_pool)
         # outf = out.view(out.size(0), -1)
