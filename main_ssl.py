@@ -83,7 +83,7 @@ if __name__ == '__main__':
     '''
 
     results = open('results_'+str(args.method_type)+"_"+args.dataset +'_main'+str(args.cycles)+
-                    str(args.total)+'old_resnet.txt','w')
+                    str(args.total)+'told_resnet.txt','w')
     print("Dataset: %s"%args.dataset)
     print("Method type:%s"%method)
     if args.total:

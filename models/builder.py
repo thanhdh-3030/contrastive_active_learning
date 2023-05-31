@@ -8,7 +8,7 @@ class MoCo(nn.Module):
     Build a MoCo model with: a query encoder, a key encoder, and a queue
     https://arxiv.org/abs/1911.05722
     """
-    def __init__(self, base_encoder, dim=128, K=65536, m=0.999, T=0.07, mlp=False):
+    def __init__(self, base_encoder, dim=512, K=256, m=0.999, T=0.2, mlp=False):
         """
         dim: feature dimension (default: 128)
         K: queue size; number of negative keys (default: 65536)
@@ -163,10 +163,11 @@ class MoCo(nn.Module):
         # labels: positive key indicators
         labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
 
+        contrast_loss= nn.functional.cross_entropy(logits, labels,reduction='none')
         # dequeue and enqueue
         self._dequeue_and_enqueue(k)
 
-        return logits, labels, features
+        return contrast_loss, features
 
     def shuffled_idx(self, batch_size):
         '''
