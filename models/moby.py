@@ -363,13 +363,15 @@ class MoBY(nn.Module):
                 cls_pred_1=pred_1[cls_mask]
                 bs=cls_pred_1.shape[0]
                 valid_class=valid_class+1
-                keys=eval('self.cls_queue2_'+str(i))[:,:bs].clone().detach()
+                # keys=eval('self.cls_queue2_'+str(i))[:,:bs].clone().detach()
+                keys=eval('self.cls_queue1_'+str(i))[:,:bs].clone().detach()
                 all_classes=[m for m in range(self.num_classes)]
                 all_classes.remove(i)
                 neg_classes=all_classes.copy()
                 neg_feat_list=[]
                 for neg_class in neg_classes:
-                    neg_feat_list.append(eval('self.cls_queue2_'+str(neg_class))[:,:256].clone().detach())
+                    # neg_feat_list.append(eval('self.cls_queue2_'+str(neg_class))[:,:256].clone().detach())
+                    neg_feat_list.append(eval('self.cls_queue1_'+str(neg_class))[:,:256].clone().detach())
                 neg_feats=torch.cat(neg_feat_list,dim=1)
                 ctr_loss += self.contrastive_loss(cls_pred_1,keys.T,neg_feats)
             ctr_loss=ctr_loss/valid_class
