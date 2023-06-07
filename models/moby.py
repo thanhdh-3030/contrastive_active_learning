@@ -167,7 +167,7 @@ class MoBY(nn.Module):
                  proj_num_layers=2,
                  pred_num_layers=2,
                  num_classes=10,
-                 contrast_num_positive=512,
+                 contrast_num_positive=2795,
                  **kwargs):
         super().__init__()
         
@@ -319,7 +319,13 @@ class MoBY(nn.Module):
         labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
 
         return F.cross_entropy(logits, labels, reduction='none')
-
+    def _compute_contrast_loss(self, l_pos, l_neg):
+        N = l_pos.size(0)
+        logits = torch.cat((l_pos,l_neg),dim=1)
+        logits /= self.contrast_temperature
+        labels = torch.zeros((N,),dtype=torch.long).cuda()
+        return F.cross_entropy(logits,labels)
+    
     def forward(self, im_1, im_2, targets=None):
         feat_1 = self.encoder(im_1)  # queries: NxC
         proj_1 = self.projector(torch.squeeze(feat_1))
@@ -363,17 +369,23 @@ class MoBY(nn.Module):
                 cls_pred_1=pred_1[cls_mask]
                 bs=cls_pred_1.shape[0]
                 valid_class=valid_class+1
-                # keys=eval('self.cls_queue2_'+str(i))[:,:bs].clone().detach()
-                keys=eval('self.cls_queue1_'+str(i))[:,:bs].clone().detach()
+                pos_keys=eval('self.cls_queue2_'+str(i))[:,:bs].clone().detach()
+                # pos_keys=eval('self.cls_queue1_'+str(i))[:,:bs].clone().detach()
+                pos_logit=torch.sum(cls_pred_1*pos_keys.T, dim=1, keepdim=True)
+                neg_logit=0
                 all_classes=[m for m in range(self.num_classes)]
                 all_classes.remove(i)
                 neg_classes=all_classes.copy()
                 neg_feat_list=[]
                 for neg_class in neg_classes:
                     # neg_feat_list.append(eval('self.cls_queue2_'+str(neg_class))[:,:256].clone().detach())
-                    neg_feat_list.append(eval('self.cls_queue1_'+str(neg_class))[:,:256].clone().detach())
-                neg_feats=torch.cat(neg_feat_list,dim=1)
-                ctr_loss += self.contrastive_loss(cls_pred_1,keys.T,neg_feats)
+                    # neg_feat_list.append(eval('self.cls_queue1_'+str(neg_class))[:,:256].clone().detach())
+                    # neg_keys=eval('self.cls_queue1_'+str(neg_class)).clone().detach()
+                    neg_keys=eval('self.cls_queue2_'+str(neg_class)).clone().detach()    
+                    neg_logit += cls_pred_1@neg_keys                
+                # neg_feats=torch.cat(neg_feat_list,dim=1)
+                # ctr_loss += self.contrastive_loss(cls_pred_1,keys.T,neg_feats)
+                ctr_loss +=self._compute_contrast_loss(pos_logit,neg_logit)
             ctr_loss=ctr_loss/valid_class
             loss=(un_ctr_loss+ctr_loss)/2
             self._dequeue_and_enqueue_label(proj_1_ng,proj_2_ng,targets)
