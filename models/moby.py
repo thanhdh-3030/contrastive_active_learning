@@ -368,25 +368,30 @@ class MoBY(nn.Module):
                 if(torch.sum(cls_mask).item()==0):continue
                 cls_pred_1=pred_1[cls_mask]
                 bs=cls_pred_1.shape[0]
+                query=torch.mean(cls_pred_1,dim=0)
                 valid_class=valid_class+1
-                pos_keys=eval('self.cls_queue2_'+str(i))[:,:bs].clone().detach()
+                # pos_keys=eval('self.cls_queue2_'+str(i))[:,:bs].clone().detach()
+                pos_keys=eval('self.cls_queue2_'+str(i)).clone().detach()
                 # pos_keys=eval('self.cls_queue1_'+str(i))[:,:bs].clone().detach()
-                pos_logit=torch.sum(cls_pred_1*pos_keys.T, dim=1, keepdim=True)
+                # pos_logit=torch.sum(cls_pred_1*pos_keys.T, dim=1, keepdim=True)
+                pos_logit=query.unsqueeze(1)*pos_keys
                 neg_logit=0
                 all_classes=[m for m in range(self.num_classes)]
                 all_classes.remove(i)
                 neg_classes=all_classes.copy()
-                neg_feat_list=[]
+                # neg_feat_list=[]
                 for neg_class in neg_classes:
                     # neg_feat_list.append(eval('self.cls_queue2_'+str(neg_class))[:,:256].clone().detach())
                     # neg_feat_list.append(eval('self.cls_queue1_'+str(neg_class))[:,:256].clone().detach())
                     # neg_keys=eval('self.cls_queue1_'+str(neg_class)).clone().detach()
                     neg_keys=eval('self.cls_queue2_'+str(neg_class)).clone().detach()    
-                    neg_logit += cls_pred_1@neg_keys                
+                    # neg_logit += cls_pred_1@neg_keys
+                    neg_logit += query.unsqueeze(1)*neg_keys                              
                 # neg_feats=torch.cat(neg_feat_list,dim=1)
                 # ctr_loss += self.contrastive_loss(cls_pred_1,keys.T,neg_feats)
                 ctr_loss +=self._compute_contrast_loss(pos_logit,neg_logit)
-            ctr_loss=ctr_loss/valid_class
+            # ctr_loss=ctr_loss/valid_class
+            # ctr_loss=0
             loss=(un_ctr_loss+ctr_loss)/2
             self._dequeue_and_enqueue_label(proj_1_ng,proj_2_ng,targets)
             self._dequeue_and_enqueue(proj_1_ng, proj_2_ng)

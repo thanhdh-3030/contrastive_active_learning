@@ -86,7 +86,7 @@ if __name__ == '__main__':
 
     results = open('results/results_'+str(args.method_type)+"_"+args.dataset +'_main'+str(args.cycles)+
                     str(args.total)+'told_resnet.txt','w')
-    experiment_name=str(args.method_type)+"_"+args.dataset +'_main'+'_label_'+str(args.cycles)
+    experiment_name=str(args.method_type)+"_"+args.dataset +'_main'+'_label_'+str(args.cycles)+'editkey'
 
     print("Dataset: %s"%args.dataset)
     print("Method type:%s"%method)
@@ -288,9 +288,10 @@ if __name__ == '__main__':
 
             Nes_flag = False        
             criterion      = nn.CrossEntropyLoss(reduction='none')
-            optim_backbone = optim.SGD(models['backbone'].parameters(), lr=LR*1, 
-               momentum=MOMENTUM, weight_decay=WDECAY, nesterov=Nes_flag)
-
+            # optim_backbone = optim.SGD(models['backbone'].parameters(), lr=LR*1, 
+            #    momentum=MOMENTUM, weight_decay=WDECAY, nesterov=Nes_flag)
+            optim_backbone=optim.AdamW(models['backbone'].parameters(), lr=LR*1, 
+               weight_decay=WDECAY)
             sched_backbone = lr_scheduler.MultiStepLR(optim_backbone, milestones=MILESTONES)
             num_steps =  int( args.no_of_epochs * len(subset) / BATCH)
             warmup_steps = int( 10 * len(subset) / BATCH)
@@ -308,9 +309,10 @@ if __name__ == '__main__':
                 models      = {'backbone': model, 'classifier': classifier}
                 num_steps =  int( args.no_of_epochs *  (init_margin + ADDENDUM*cycle) / BATCH)
                 warmup_steps = int( 10 * (init_margin + ADDENDUM*cycle) / BATCH)
-                optim_classifier = optim.SGD(models['classifier'].parameters(), lr=0.01, 
-                                    momentum=0.9, weight_decay=0.0, nesterov=Nes_flag)
-
+                # optim_classifier = optim.SGD(models['classifier'].parameters(), lr=0.001, 
+                #                     momentum=0.9, weight_decay=0.0, nesterov=Nes_flag)
+                optim_classifier=optim.AdamW(models['backbone'].parameters(), lr=0.001, 
+                weight_decay=WDECAY)
                 sched_classifier = lr_scheduler.MultiStepLR(optim_classifier, milestones=MILESTONES)
 
                 optimizers = {'backbone': optim_backbone, 'classifier': optim_classifier}

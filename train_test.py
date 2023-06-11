@@ -412,6 +412,7 @@ def train_epoch_ssl2(models, method, criterion, optimizers, dataloaders,
 	idx = 0
 	num_steps = len(dataloaders['train'])
 	c_loss_gain = 0.5 #- 0.05*cycle
+	# c_loss_gain = 1
 	# for (samples,samples_a) in tqdm(zip(dataloaders['train'],dataloaders['train2']), leave=False, total=len(dataloaders['train'])):
 	ce_loss_meter=AverageMeter()
 	ctr_loss_meter=AverageMeter()
@@ -445,8 +446,9 @@ def train_epoch_ssl2(models, method, criterion, optimizers, dataloaders,
 		optimizers['backbone'].step()
 		ce_loss_meter.update(t_loss.item())
 		# if (idx % 2 ==0) or (idx <= last_inter):
+		# if (idx % 2 ==0):
+		# 	optimizers['classifier'].step()
 		# 	optimizers['classifier'].zero_grad()
-			# optimizers['classifier'].step()
 	
 		idx +=1
 	print('\nce loss:',ce_loss_meter.avg)
