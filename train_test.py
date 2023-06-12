@@ -249,7 +249,7 @@ def test_without_ssl2(models, epoch, no_classes, dataloaders, args, cycle, mode=
 				inputs = inputs.cuda()
 				labels = labels.cuda()
 
-				_, feat,_ = models['backbone'](inputs,inputs,labels)
+				_,_, feat,_ = models['backbone'](inputs,inputs,labels)
 				# feat = models_b(inputs)
 				scores = models['classifier'](feat)
 				_, preds = torch.max(scores.data, 1)
@@ -411,8 +411,8 @@ def train_epoch_ssl2(models, method, criterion, optimizers, dataloaders,
 	TRAIN_CLIP_GRAD = True
 	idx = 0
 	num_steps = len(dataloaders['train'])
-	c_loss_gain = 0.5 #- 0.05*cycle
-	# c_loss_gain = 1
+	# c_loss_gain = 0.5 #- 0.05*cycle
+	c_loss_gain = 0.5
 	# for (samples,samples_a) in tqdm(zip(dataloaders['train'],dataloaders['train2']), leave=False, total=len(dataloaders['train'])):
 	ce_loss_meter=AverageMeter()
 	ctr_loss_meter=AverageMeter()
@@ -425,12 +425,63 @@ def train_epoch_ssl2(models, method, criterion, optimizers, dataloaders,
 
 		# if (idx % 2 ==0) or (idx <= last_inter):
 		if (idx % 2 ==0):
-			contrastive_loss, features,_= models['backbone'](samples_a, samples_r,targets)
+			contrastive_loss,l_contrastive_loss, features,_= models['backbone'](samples_a, samples_r,targets)
 			scores = models['classifier'](features)
 			target_loss = criterion(scores, targets)
 			t_loss = (torch.sum(target_loss)) / target_loss.size(0)
 			# c_loss = (torch.sum(contrastive_loss)) / contrastive_loss.size(0)
 			c_loss=contrastive_loss
+			loss = t_loss + c_loss_gain*c_loss
+			# loss.backward()
+			ce_loss_meter.update(t_loss.item(),target_loss.size(0))
+			ctr_loss_meter.update(c_loss.item(),target_loss.size(0))
+		else:
+			contrastive_loss, features,_= models['backbone'](samples_a, samples_r)
+			# c_loss=(torch.sum(contrastive_loss)) / contrastive_loss.size(0)
+			c_loss= contrastive_loss
+			loss = c_loss_gain *c_loss
+			ctr_loss_meter.update(c_loss.item(),target_loss.size(0))
+		optimizers['backbone'].zero_grad()
+		loss.backward()
+		optimizers['backbone'].step()
+		ce_loss_meter.update(t_loss.item())
+		# if (idx % 2 ==0) or (idx <= last_inter):
+		# if (idx % 2 ==0):
+		# 	optimizers['classifier'].step()
+		# 	optimizers['classifier'].zero_grad()
+	
+		idx +=1
+	print('\nce loss:',ce_loss_meter.avg)
+	print('ctr loss: ',ctr_loss_meter.avg)
+	return loss
+
+def train_epoch_ssl3(models, method, criterion, optimizers, dataloaders, 
+										epoch, schedulers, cycle, last_inter):
+	models['backbone'].train()
+	models['classifier'].train()
+	TRAIN_CLIP_GRAD = True
+	idx = 0
+	num_steps = len(dataloaders['train'])
+	# c_loss_gain = 0.5 #- 0.05*cycle
+	c_loss_gain = 0.1
+	# for (samples,samples_a) in tqdm(zip(dataloaders['train'],dataloaders['train2']), leave=False, total=len(dataloaders['train'])):
+	ce_loss_meter=AverageMeter()
+	ctr_loss_meter=AverageMeter()
+	for (samples,samples_a) in zip(dataloaders['train'],dataloaders['train2']):        
+		samples_a = samples_a[0].cuda(non_blocking=True)
+		samples_r = samples[0].cuda(non_blocking=True)
+		targets   = samples[1].cuda(non_blocking=True)
+
+		# contrastive_loss, features,_= models['backbone'](samples_a, samples_r,targets)
+
+		# if (idx % 2 ==0) or (idx <= last_inter):
+		if (idx % 2 ==0):
+			contrastive_loss,l_contrastive_loss, features,_= models['backbone'](samples_a, samples_r,targets)
+			scores = models['classifier'](features)
+			target_loss = criterion(scores, targets)
+			t_loss = (torch.sum(target_loss)) / target_loss.size(0)
+			# c_loss = (torch.sum(contrastive_loss)) / contrastive_loss.size(0)
+			c_loss=l_contrastive_loss
 			loss = t_loss + c_loss_gain*c_loss
 			# loss.backward()
 			ce_loss_meter.update(t_loss.item(),target_loss.size(0))
@@ -467,7 +518,10 @@ def train_with_ssl2(models, method, criterion, optimizers, schedulers, dataloade
 
 		best_loss = torch.tensor([99]).cuda()
 		# loss = train_epoch(models, method, criterion, optimizers, dataloaders, epoch, epoch_loss)
-		loss = train_epoch_ssl2(models, method, criterion, optimizers, dataloaders, epoch, schedulers, cycle, last_inter)
+		if(epoch <num_epochs/2):
+			loss = train_epoch_ssl2(models, method, criterion, optimizers, dataloaders, epoch, schedulers, cycle, last_inter)
+		else:
+			loss=train_epoch_ssl3(models, method, criterion, optimizers, dataloaders, epoch, schedulers, cycle, last_inter)
 		schedulers['classifier'].step(loss)
 		schedulers['backbone'].step(loss)
 
