@@ -167,7 +167,7 @@ class MoBY(nn.Module):
                  proj_num_layers=2,
                  pred_num_layers=2,
                  num_classes=10,
-                 contrast_num_positive=2795,
+                 contrast_num_positive=128,
                  **kwargs):
         super().__init__()
         
@@ -361,40 +361,57 @@ class MoBY(nn.Module):
         else:
             un_ctr_loss = self.contrastive_loss(pred_1, proj_2_ng, self.queue2) \
                 + self.contrastive_loss(pred_2, proj_1_ng, self.queue1)
-            ctr_loss=0
+            la_ctr_loss=0
             valid_class=0
+            proto_list=[]
+            for i in range(self.num_classes):
+                cls_mask=(targets==i)
+                if(torch.sum(cls_mask).item()==0):continue
+                cls_pred_1=pred_1[cls_mask]
+                cls_proto=torch.mean(cls_pred_1,dim=0)
+                proto_list.append(cls_proto)
+                valid_class=valid_class+1
+
             for i in range(self.num_classes):
                 cls_mask=(targets==i)
                 if(torch.sum(cls_mask).item()==0):continue
                 cls_pred_1=pred_1[cls_mask]
                 bs=cls_pred_1.shape[0]
-                query=torch.mean(cls_pred_1,dim=0)
-                valid_class=valid_class+1
+                # query=torch.mean(cls_pred_1,dim=0)
+                query=cls_pred_1
+                pos_keys=proj_2_ng[cls_mask]
                 # pos_keys=eval('self.cls_queue2_'+str(i))[:,:bs].clone().detach()
                 # pos_keys=eval('self.cls_queue2_'+str(i)).clone().detach()
-                pos_keys=eval('self.cls_queue1_'+str(i))[:,:bs].clone().detach()
-                pos_logit=torch.sum(cls_pred_1*pos_keys.T, dim=1, keepdim=True)
-                pos_logit=query.unsqueeze(1)*pos_keys
+                # pos_keys=eval('self.cls_queue1_'+str(i))[:,:bs].clone().detach()
+                # pos_keys=proto_list[i].unsqueeze(0).repeat(bs, 1)
+                # pos_logit=torch.sum(cls_pred_1*pos_keys.T, dim=1, keepdim=True)
+                # pos_logit=query.unsqueeze(1)*pos_keys
                 neg_logit=0
                 all_classes=[m for m in range(self.num_classes)]
                 all_classes.remove(i)
                 neg_classes=all_classes.copy()
                 neg_feat_list=[]
                 for neg_class in neg_classes:
-                    # neg_feat_list.append(eval('self.cls_queue2_'+str(neg_class))[:,:128].clone().detach())
+                    neg_feat_list.append(eval('self.cls_queue2_'+str(neg_class))[:,:128].clone().detach())
                     # neg_feat_list.append(eval('self.cls_queue1_'+str(neg_class))[:,:256].clone().detach())
                     # neg_keys=eval('self.cls_queue1_'+str(neg_class)).clone().detach()
-                    neg_keys=eval('self.cls_queue2_'+str(neg_class)).clone().detach()    
+                    # neg_keys=eval('self.cls_queue2_'+str(neg_class)).clone().detach()    
                     # neg_logit += cls_pred_1@neg_keys
-                    neg_logit += query.unsqueeze(1)*neg_keys                              
-                # neg_feats=torch.cat(neg_feat_list,dim=1)
-                # ctr_loss = self.contrastive_loss(cls_pred_1,pos_keys.T,neg_feats)
-                # ctr_loss=self.contrastive_loss_q(query,pos_keys)
-                ctr_loss +=self._compute_contrast_loss(pos_logit,neg_logit)
-            # ctr_loss=ctr_loss/valid_class
+                    # neg_logit += query.unsqueeze(1)*neg_keys                              
+                neg_feats=torch.cat(neg_feat_list,dim=1)
+                # la_ctr_loss += self.contrastive_loss(cls_pred_1,pos_keys,neg_feats)
+                # la_ctr_loss += self.contrastive_loss(cls_pred_1,pos_keys.T,self.queue2[:,:256].clone().detach())
+                # neg_feats=neg_feats.T.repeat(bs,1,1)
+                # all_feats=torch.cat((pos_keys.T.unsqueeze(1),neg_feats),dim=1)
+                # logits=torch.cosine_similarity(cls_pred_1.unsqueeze(1),all_feats,dim=2)
+                # la_ctr_loss += F.cross_entropy(logits/self.contrast_temperature,torch.zeros(bs).long().cuda())
+                la_ctr_loss += self.contrastive_loss(query, pos_keys, neg_feats)
+                # # ctr_loss=self.contrastive_loss_q(query,pos_keys)
+                # ctr_loss +=self._compute_contrast_loss(pos_logit,neg_logit)
+            la_ctr_loss=la_ctr_loss/valid_class
             # ctr_loss=0
             # loss=(un_ctr_loss+ctr_loss)/2
             # loss=un_ctr_loss
             self._dequeue_and_enqueue_label(proj_1_ng,proj_2_ng,targets)
             self._dequeue_and_enqueue(proj_1_ng, proj_2_ng)
-            return un_ctr_loss,ctr_loss,feat_2,None
+            return un_ctr_loss,la_ctr_loss,feat_2,None

@@ -415,7 +415,8 @@ def train_epoch_ssl2(models, method, criterion, optimizers, dataloaders,
 	c_loss_gain = 0.5
 	# for (samples,samples_a) in tqdm(zip(dataloaders['train'],dataloaders['train2']), leave=False, total=len(dataloaders['train'])):
 	ce_loss_meter=AverageMeter()
-	ctr_loss_meter=AverageMeter()
+	un_ctr_loss_meter=AverageMeter()
+	la_ctr_loss_meter=AverageMeter()	
 	for (samples,samples_a) in zip(dataloaders['train'],dataloaders['train2']):        
 		samples_a = samples_a[0].cuda(non_blocking=True)
 		samples_r = samples[0].cuda(non_blocking=True)
@@ -434,13 +435,14 @@ def train_epoch_ssl2(models, method, criterion, optimizers, dataloaders,
 			loss = t_loss + c_loss_gain*c_loss
 			# loss.backward()
 			ce_loss_meter.update(t_loss.item(),target_loss.size(0))
-			ctr_loss_meter.update(c_loss.item(),target_loss.size(0))
+			un_ctr_loss_meter.update(contrastive_loss.item(),target_loss.size(0))
+			la_ctr_loss_meter.update(l_contrastive_loss.item(),target_loss.size(0))
 		else:
 			contrastive_loss, features,_= models['backbone'](samples_a, samples_r)
 			# c_loss=(torch.sum(contrastive_loss)) / contrastive_loss.size(0)
 			c_loss= contrastive_loss
 			loss = c_loss_gain *c_loss
-			ctr_loss_meter.update(c_loss.item(),target_loss.size(0))
+			un_ctr_loss_meter.update(c_loss.item(),target_loss.size(0))
 		optimizers['backbone'].zero_grad()
 		loss.backward()
 		optimizers['backbone'].step()
@@ -452,7 +454,8 @@ def train_epoch_ssl2(models, method, criterion, optimizers, dataloaders,
 	
 		idx +=1
 	print('\nce loss:',ce_loss_meter.avg)
-	print('ctr loss: ',ctr_loss_meter.avg)
+	print('un ctr loss: ',un_ctr_loss_meter.avg)
+	print('la ctr loss: ',la_ctr_loss_meter.avg)
 	return loss
 
 def train_epoch_ssl3(models, method, criterion, optimizers, dataloaders, 
@@ -463,10 +466,11 @@ def train_epoch_ssl3(models, method, criterion, optimizers, dataloaders,
 	idx = 0
 	num_steps = len(dataloaders['train'])
 	# c_loss_gain = 0.5 #- 0.05*cycle
-	c_loss_gain = 0.1
+	c_loss_gain = 0.5
 	# for (samples,samples_a) in tqdm(zip(dataloaders['train'],dataloaders['train2']), leave=False, total=len(dataloaders['train'])):
 	ce_loss_meter=AverageMeter()
-	ctr_loss_meter=AverageMeter()
+	un_ctr_loss_meter=AverageMeter()
+	la_ctr_loss_meter=AverageMeter()
 	for (samples,samples_a) in zip(dataloaders['train'],dataloaders['train2']):        
 		samples_a = samples_a[0].cuda(non_blocking=True)
 		samples_r = samples[0].cuda(non_blocking=True)
@@ -485,13 +489,14 @@ def train_epoch_ssl3(models, method, criterion, optimizers, dataloaders,
 			loss = t_loss + c_loss_gain*c_loss
 			# loss.backward()
 			ce_loss_meter.update(t_loss.item(),target_loss.size(0))
-			ctr_loss_meter.update(c_loss.item(),target_loss.size(0))
+			un_ctr_loss_meter.update(contrastive_loss.item(),target_loss.size(0))
+			la_ctr_loss_meter.update(l_contrastive_loss.item(),target_loss.size(0))
 		else:
 			contrastive_loss, features,_= models['backbone'](samples_a, samples_r)
 			# c_loss=(torch.sum(contrastive_loss)) / contrastive_loss.size(0)
 			c_loss= contrastive_loss
 			loss = c_loss_gain *c_loss
-			ctr_loss_meter.update(c_loss.item(),target_loss.size(0))
+			un_ctr_loss_meter.update(c_loss.item(),target_loss.size(0))
 		optimizers['backbone'].zero_grad()
 		loss.backward()
 		optimizers['backbone'].step()
@@ -503,7 +508,9 @@ def train_epoch_ssl3(models, method, criterion, optimizers, dataloaders,
 	
 		idx +=1
 	print('\nce loss:',ce_loss_meter.avg)
-	print('ctr loss: ',ctr_loss_meter.avg)
+	print('un ctr loss: ',un_ctr_loss_meter.avg)
+	print('la ctr loss: ',la_ctr_loss_meter.avg)
+
 	return loss
 
 def train_with_ssl2(models, method, criterion, optimizers, schedulers, dataloaders, num_epochs, 
