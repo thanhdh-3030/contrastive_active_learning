@@ -486,7 +486,7 @@ def train_epoch_ssl3(models, method, criterion, optimizers, dataloaders,
 			t_loss = (torch.sum(target_loss)) / target_loss.size(0)
 			# c_loss = (torch.sum(contrastive_loss)) / contrastive_loss.size(0)
 			c_loss=l_contrastive_loss
-			loss = t_loss + c_loss_gain*c_loss
+			loss = t_loss + c_loss_gain*(contrastive_loss+l_contrastive_loss)
 			# loss.backward()
 			ce_loss_meter.update(t_loss.item(),target_loss.size(0))
 			un_ctr_loss_meter.update(contrastive_loss.item(),target_loss.size(0))

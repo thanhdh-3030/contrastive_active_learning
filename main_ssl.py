@@ -86,7 +86,7 @@ if __name__ == '__main__':
 
     results = open('results/results_'+str(args.method_type)+"_"+args.dataset +'_main'+str(args.cycles)+
                     str(args.total)+'told_resnet.txt','w')
-    experiment_name=str(args.method_type)+"_"+args.dataset +'_main'+'_label_'+str(args.cycles)+'editkey4'
+    experiment_name=str(args.method_type)+"_"+args.dataset +'_main'+'_label_'+str(args.cycles)+'editkey5'
 
     print("Dataset: %s"%args.dataset)
     print("Method type:%s"%method)
