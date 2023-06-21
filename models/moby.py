@@ -225,7 +225,7 @@ class MoBY(nn.Module):
 			self.register_buffer("cls_queue"+str(i), torch.randn(128, self.contrast_num_positive))
 			# self.register_buffer("cls_queue2_"+str(i), torch.randn(128, self.contrast_num_positive))
 			self.register_buffer("cls_queue_ptr"+str(i),torch.zeros(1,dtype=torch.long))
-			exec("self.cls_queue_"+str(i) + '=' + 'nn.functional.normalize(' + "self.cls_queue_"+str(i) + ',dim=0)')
+			exec("self.cls_queue"+str(i) + '=' + 'nn.functional.normalize(' + "self.cls_queue"+str(i) + ',dim=0)')
 			# exec("self.cls_queue2_"+str(i) + '=' + 'nn.functional.normalize(' + "self.cls_queue2_"+str(i) + ',dim=0)')
 
 	@torch.no_grad()
@@ -263,7 +263,7 @@ class MoBY(nn.Module):
 
 		self.queue_ptr[0] = ptr
 	@torch.no_grad()
-	def _dequeue_and_enqueue_label(self, keys,labels,valid_mask):
+	def _dequeue_and_enqueue_label(self, keys,labels):
 		# gather keys before updating queue
 		# keys1 = dist_collect(keys1)
 		# keys2 = dist_collect(keys2)
@@ -278,7 +278,7 @@ class MoBY(nn.Module):
 			this_ptr = int(eval('self.cls_queue_ptr'+str(i)))
 			if(this_ptr+batch_size)<=self.contrast_num_positive:
 				# replace the keys at ptr (dequeue and enqueue)
-				eval("self.cls_queue_"+str(i))[:,this_ptr:this_ptr + batch_size]=this_keys1.T
+				eval("self.cls_queue"+str(i))[:,this_ptr:this_ptr + batch_size]=this_keys1.T
 				# eval("self.cls_queue2_"+str(i))[:,this_ptr:this_ptr + batch_size]=this_keys2.T
 			else:
 				inx=self.contrast_num_positive-this_ptr
@@ -286,8 +286,8 @@ class MoBY(nn.Module):
 				tail_keys1=this_keys1[inx:]
 				# head_keys2=this_keys2[:inx]
 				# tail_keys2=this_keys2[inx:]
-				eval("self.cls_queue_"+str(i))[:,this_ptr:]=head_keys1.T
-				eval("self.cls_queue_"+str(i))[:,:len(tail_keys1)]=tail_keys1.T
+				eval("self.cls_queue"+str(i))[:,this_ptr:]=head_keys1.T
+				eval("self.cls_queue"+str(i))[:,:len(tail_keys1)]=tail_keys1.T
 				# eval("self.cls_queue2_"+str(i))[:,this_ptr:]=head_keys2.T
 				# eval("self.cls_queue2_"+str(i))[:,:len(tail_keys1)]=tail_keys2.T
 			eval("self.cls_queue_ptr"+str(i))[0]=(this_ptr + batch_size) % self.contrast_num_positive # move pointer
@@ -363,6 +363,9 @@ class MoBY(nn.Module):
 			proj_2_ng = self.projector_k(feat_2_ng)
 			proj_2_ng = F.normalize(proj_2_ng, dim=1)
 
+			embed_2_ng=self.adapter_k(feat_2_ng)
+			embed_2_ng = F.normalize(embed_2_ng, dim=1)
+
 		if targets is None:
 			# compute loss
 			loss = self.contrastive_loss(pred_1, proj_2_ng, self.queue2) \
@@ -394,44 +397,36 @@ class MoBY(nn.Module):
 				valid_class=valid_class+1
 
 			for i in range(len(appear_classes)):
-				# cls_mask=(targets==appear_classes[i])
 				cls_mask=(targets==appear_classes[i])
 				cls_pred_1=embed_2[cls_mask].squeeze(-1).squeeze(-1)
 				bs=cls_pred_1.shape[0]
-				# query=torch.mean(cls_pred_1,dim=0)
 				query=cls_pred_1
-				pos_keys=torch.mean(proto_list[i],dim=0).repeat(bs,1)
-				# pos_keys=eval('self.cls_queue2_'+str(i))[:,:bs].clone().detach()
-				# pos_keys=eval('self.cls_queue2_'+str(i)).clone().detach()
+				# pos_keys=torch.mean(proto_list[i],dim=0).repeat(bs,1)
+				pos_keys=torch.mean(eval('self.cls_queue'+str(i)).clone().detach(),dim=1).T.repeat(bs,1)
 				# pos_keys=eval('self.cls_queue1_'+str(i))[:,:bs].clone().detach().T
-				# pos_keys=proj_2_ng[cls_mask].mean(0).repeat(bs,1)
-				# pos_keys=proto_list[i].unsqueeze(0).repeat(bs, 1)
 				# pos_logit=torch.sum(cls_pred_1*pos_keys.T, dim=1, keepdim=True)
 				# pos_logit=query.unsqueeze(1)*pos_keys
-				neg_logit=0
-				# all_classes=[m for m in range(self.num_classes)]
-				# all_classes=appear_classes.copy()
-				# all_classes.remove(i)
-				# neg_classes=all_classes.copy()
-				neg_feat_list=proto_list[:i]+proto_list[i+1:]
-				# for neg_class in neg_classes:
+				# neg_logit=0
+				all_classes=[m for m in range(self.num_classes)]
+				all_classes=appear_classes.copy()
+				all_classes.remove(appear_classes[i])
+				neg_classes=all_classes.copy()
+				neg_feat_list=[]
+				# neg_feat_list=proto_list[:i]+proto_list[i+1:]
+				for neg_class in neg_classes:
 					# neg_feat_list.append(eval('self.cls_queue2_'+str(neg_class))[:,:128].clone().detach())
 					# neg_feat_list.append(proto_list[neg_class])
-					# neg_feat_list.append(eval('self.cls_queue1_'+str(neg_class))[:,:64].clone().detach())
+					neg_feat_list.append(eval('self.cls_queue'+str(neg_class)).clone().detach())
 					# neg_keys=eval('self.cls_queue1_'+str(neg_class)).clone().detach()
-					# neg_keys=eval('self.cls_queue2_'+str(neg_class)).clone().detach()    
-					# neg_logit += cls_pred_1@neg_keys
-					# neg_logit += query.unsqueeze(1)*neg_keys                              
-				neg_feats=torch.cat(neg_feat_list,dim=0)
-				# la_ctr_loss += self.contrastive_loss(cls_pred_1,pos_keys,neg_feats)
-				# la_ctr_loss += self.contrastive_loss(cls_pred_1,pos_keys.T,self.queue2[:,:256].clone().detach())
+					# neg_keys=eval('self.cls_queue2_'+str(neg_class)).clone().detach()                                 
+				neg_feats=torch.cat(neg_feat_list,dim=1)
 				# neg_feats=neg_feats.T.repeat(bs,1,1)
 				# all_feats=torch.cat((pos_keys.T.unsqueeze(1),neg_feats),dim=1)
-				# logits=torch.cosine_similarity(cls_pred_1.unsqueeze(1),all_feats,dim=2)
+				# la_ctr_loss += self.contrastive_loss(cls_pred_1,pos_keys,neg_feats)
 				# la_ctr_loss += F.cross_entropy(logits/self.contrast_temperature,torch.zeros(bs).long().cuda())
 				query=F.normalize(query,dim=1)
 				pos_keys=F.normalize(pos_keys,dim=1)
-				neg_keys=F.normalize(neg_feats,dim=1).T
+				neg_keys=F.normalize(neg_feats,dim=0)
 				la_ctr_loss += self.contrastive_loss(query, pos_keys,neg_keys)
 				# # ctr_loss=self.contrastive_loss_q(query,pos_keys)
 				# ctr_loss +=self._compute_contrast_loss(pos_logit,neg_logit)
@@ -441,6 +436,6 @@ class MoBY(nn.Module):
 			# ctr_loss=0
 			# loss=(un_ctr_loss+ctr_loss)/2
 			# loss=un_ctr_loss
-			# self._dequeue_and_enqueue_label(pred_1,pred_2,targets,valid_mask)
 			self._dequeue_and_enqueue(proj_1_ng, proj_2_ng)
+			self._dequeue_and_enqueue_label(embed_2_ng,targets)
 			return un_ctr_loss,la_ctr_loss,feat_2,None
