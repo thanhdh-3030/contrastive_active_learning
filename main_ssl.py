@@ -84,8 +84,8 @@ if __name__ == '__main__':
     method_type: 'Random', 'CoreSet', 'mobyv2al'
     '''
 
-    results = open('results/results_'+str(args.method_type)+"_"+args.dataset +'_main'+str(args.cycles)+
-                    str(args.total)+'told_resnet.txt','w')
+    # results = open('results/results_'+str(args.method_type)+"_"+args.dataset +'_main'+str(args.cycles)+
+    #                 str(args.total)+'told_resnet.txt','w')
     experiment_name=str(args.method_type)+"_"+args.dataset +'_main'+'_label_'+str(args.cycles)+'editkey5'
 
     print("Dataset: %s"%args.dataset)
@@ -335,8 +335,8 @@ if __name__ == '__main__':
                             args.no_of_epochs, EPOCHL, args, unlabeled_set, labeled_set, data_unlabeled)
 
             print('Trial {}/{} || Cycle {}/{} || Label set size {}: Test acc {}'.format(trial+1, TRIALS, cycle+1, CYCLES, len(labeled_set), acc))
-            np.array([method, trial+1, TRIALS, cycle+1, CYCLES, len(labeled_set), acc]).tofile(results, sep=" ")
-            results.write("\n")
+            # np.array([method, trial+1, TRIALS, cycle+1, CYCLES, len(labeled_set), acc]).tofile(results, sep=" ")
+            # results.write("\n")
             if args.use_wandb:
                 wandb.log({'acc':acc/100,'round':cycle},step=cycle)
 
@@ -361,4 +361,4 @@ if __name__ == '__main__':
             #unlabeled_set = listd + unlabeled_set
             print(len(labeled_set), min(labeled_set), max(labeled_set))
 
-    results.close()
+    # results.close()

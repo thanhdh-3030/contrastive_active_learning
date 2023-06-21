@@ -167,7 +167,7 @@ class MoBY(nn.Module):
 				 proj_num_layers=2,
 				 pred_num_layers=2,
 				 num_classes=10,
-				 contrast_num_positive=128,
+				 contrast_num_positive=256,
 				 **kwargs):
 		super().__init__()
 		
@@ -186,8 +186,8 @@ class MoBY(nn.Module):
 		self.num_classes=num_classes
 		self.projector = MoBYMLP(in_dim=self.encoder.num_features, num_layers=proj_num_layers)
 		self.projector_k = MoBYMLP(in_dim=self.encoder.num_features, num_layers=proj_num_layers)
-		self.adaptor = MoBYMLP(in_dim=self.encoder.num_features, num_layers=proj_num_layers)
-		# self.en_adaptor=MoBYMLP(in_dim=128,num_layers=pred_num_layers)
+		self.adapter = MoBYMLP(in_dim=self.encoder.num_features, num_layers=proj_num_layers)
+		self.adapter_k = MoBYMLP(in_dim=self.encoder.num_features, num_layers=proj_num_layers)
 		self.predictor = MoBYMLP(in_dim=128,num_layers=pred_num_layers)
 
 		for param_q, param_k in zip(self.encoder.parameters(), self.encoder_k.parameters()):
@@ -198,6 +198,9 @@ class MoBY(nn.Module):
 			param_k.data.copy_(param_q.data)
 			param_k.requires_grad = False
 
+		for param_q, param_k in zip(self.adapter.parameters(), self.adapter_k.parameters()):
+			param_k.data.copy_(param_q.data)
+			param_k.requires_grad = False
 		# if self.cfg.MODEL.SWIN.NORM_BEFORE_MLP == 'bn':
 		#     nn.SyncBatchNorm.convert_sync_batchnorm(self.encoder)
 		#     nn.SyncBatchNorm.convert_sync_batchnorm(self.encoder_k)
@@ -219,11 +222,11 @@ class MoBY(nn.Module):
 
 		self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
 		for i in range(self.num_classes):
-			self.register_buffer("cls_queue1_"+str(i), torch.randn(128, self.contrast_num_positive))
-			self.register_buffer("cls_queue2_"+str(i), torch.randn(128, self.contrast_num_positive))
+			self.register_buffer("cls_queue"+str(i), torch.randn(128, self.contrast_num_positive))
+			# self.register_buffer("cls_queue2_"+str(i), torch.randn(128, self.contrast_num_positive))
 			self.register_buffer("cls_queue_ptr"+str(i),torch.zeros(1,dtype=torch.long))
-			exec("self.cls_queue1_"+str(i) + '=' + 'nn.functional.normalize(' + "self.cls_queue1_"+str(i) + ',dim=0)')
-			exec("self.cls_queue2_"+str(i) + '=' + 'nn.functional.normalize(' + "self.cls_queue2_"+str(i) + ',dim=0)')
+			exec("self.cls_queue_"+str(i) + '=' + 'nn.functional.normalize(' + "self.cls_queue_"+str(i) + ',dim=0)')
+			# exec("self.cls_queue2_"+str(i) + '=' + 'nn.functional.normalize(' + "self.cls_queue2_"+str(i) + ',dim=0)')
 
 	@torch.no_grad()
 	def _momentum_update_key_encoder(self):
@@ -237,6 +240,9 @@ class MoBY(nn.Module):
 			param_k.data = param_k.data * _contrast_momentum + param_q.data * (1. - _contrast_momentum)
 
 		for param_q, param_k in zip(self.projector.parameters(), self.projector_k.parameters()):
+			param_k.data = param_k.data * _contrast_momentum + param_q.data * (1. - _contrast_momentum)
+
+		for param_q, param_k in zip(self.adapter.parameters(), self.adapter_k.parameters()):
 			param_k.data = param_k.data * _contrast_momentum + param_q.data * (1. - _contrast_momentum)
 
 	@torch.no_grad()
@@ -257,32 +263,33 @@ class MoBY(nn.Module):
 
 		self.queue_ptr[0] = ptr
 	@torch.no_grad()
-	def _dequeue_and_enqueue_label(self, keys1, keys2,labels,valid_mask):
+	def _dequeue_and_enqueue_label(self, keys,labels,valid_mask):
 		# gather keys before updating queue
 		# keys1 = dist_collect(keys1)
 		# keys2 = dist_collect(keys2)
 		for i in range(self.num_classes):
-			cls_mask=torch.logical_and(labels==i,valid_mask)
+			# cls_mask=torch.logical_and(labels==i,valid_mask)
+			cls_mask=(labels==i)
 			if(torch.sum(cls_mask).item()==0):continue
-			this_keys1=keys1[cls_mask]
+			this_keys1=keys[cls_mask]
 			# print(this_keys1.shape)
-			this_keys2=keys2[cls_mask]
+			# this_keys2=keys2[cls_mask]
 			batch_size=this_keys1.shape[0]
 			this_ptr = int(eval('self.cls_queue_ptr'+str(i)))
 			if(this_ptr+batch_size)<=self.contrast_num_positive:
 				# replace the keys at ptr (dequeue and enqueue)
-				eval("self.cls_queue1_"+str(i))[:,this_ptr:this_ptr + batch_size]=this_keys1.T
-				eval("self.cls_queue2_"+str(i))[:,this_ptr:this_ptr + batch_size]=this_keys2.T
+				eval("self.cls_queue_"+str(i))[:,this_ptr:this_ptr + batch_size]=this_keys1.T
+				# eval("self.cls_queue2_"+str(i))[:,this_ptr:this_ptr + batch_size]=this_keys2.T
 			else:
 				inx=self.contrast_num_positive-this_ptr
 				head_keys1=this_keys1[:inx]
 				tail_keys1=this_keys1[inx:]
-				head_keys2=this_keys2[:inx]
-				tail_keys2=this_keys2[inx:]
-				eval("self.cls_queue1_"+str(i))[:,this_ptr:]=head_keys1.T
-				eval("self.cls_queue1_"+str(i))[:,:len(tail_keys1)]=tail_keys1.T
-				eval("self.cls_queue2_"+str(i))[:,this_ptr:]=head_keys2.T
-				eval("self.cls_queue2_"+str(i))[:,:len(tail_keys1)]=tail_keys2.T
+				# head_keys2=this_keys2[:inx]
+				# tail_keys2=this_keys2[inx:]
+				eval("self.cls_queue_"+str(i))[:,this_ptr:]=head_keys1.T
+				eval("self.cls_queue_"+str(i))[:,:len(tail_keys1)]=tail_keys1.T
+				# eval("self.cls_queue2_"+str(i))[:,this_ptr:]=head_keys2.T
+				# eval("self.cls_queue2_"+str(i))[:,:len(tail_keys1)]=tail_keys2.T
 			eval("self.cls_queue_ptr"+str(i))[0]=(this_ptr + batch_size) % self.contrast_num_positive # move pointer
 
 	def contrastive_loss(self, q, k, queue):
@@ -335,8 +342,8 @@ class MoBY(nn.Module):
 		pred_1 = F.normalize(pred_1, dim=1)
 
 		feat_2 = self.encoder(im_2)
-		embed_2=self.adaptor(torch.squeeze(feat_2))
-		# embed_22=self.en_adaptor(embed_2)
+		embed_2=self.adapter(torch.squeeze(feat_2))
+		# embed_22=self.en_adapter(embed_2)
 
 		proj_2 = self.projector(torch.squeeze(feat_2))
 		pred_2 = self.predictor(proj_2)
