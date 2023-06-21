@@ -466,7 +466,7 @@ def train_epoch_ssl3(models, method, criterion, optimizers, dataloaders,
 	idx = 0
 	num_steps = len(dataloaders['train'])
 	# c_loss_gain = 0.5 #- 0.05*cycle
-	c_loss_gain = 0.5
+	c_loss_gain = 0.4
 	# for (samples,samples_a) in tqdm(zip(dataloaders['train'],dataloaders['train2']), leave=False, total=len(dataloaders['train'])):
 	ce_loss_meter=AverageMeter()
 	un_ctr_loss_meter=AverageMeter()
@@ -526,13 +526,13 @@ def train_with_ssl2(models, method, criterion, optimizers, schedulers, dataloade
 		best_loss = torch.tensor([99]).cuda()
 		# loss = train_epoch(models, method, criterion, optimizers, dataloaders, epoch, epoch_loss)
 		if(epoch <num_epochs/2):
-			loss = train_epoch_ssl2(models, method, criterion, optimizers, dataloaders, epoch, schedulers, cycle, last_inter)
+			loss = train_epoch_ssl3(models, method, criterion, optimizers, dataloaders, epoch, schedulers, cycle, last_inter)
 		else:
 			loss=train_epoch_ssl3(models, method, criterion, optimizers, dataloaders, epoch, schedulers, cycle, last_inter)
 		schedulers['classifier'].step(loss)
 		schedulers['backbone'].step(loss)
 
-		if True and epoch % 20  == 1:
+		if True and epoch % 10  == 1:
 			# acc = test_with_ssl(models, epoch, method, dataloaders, args, mode='test')
 			# print(loss.item())
 			# if epoch == 1:

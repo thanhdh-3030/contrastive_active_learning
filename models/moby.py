@@ -186,6 +186,8 @@ class MoBY(nn.Module):
 		self.num_classes=num_classes
 		self.projector = MoBYMLP(in_dim=self.encoder.num_features, num_layers=proj_num_layers)
 		self.projector_k = MoBYMLP(in_dim=self.encoder.num_features, num_layers=proj_num_layers)
+		self.adaptor = MoBYMLP(in_dim=self.encoder.num_features, num_layers=proj_num_layers)
+		# self.en_adaptor=MoBYMLP(in_dim=128,num_layers=pred_num_layers)
 		self.predictor = MoBYMLP(in_dim=128,num_layers=pred_num_layers)
 
 		for param_q, param_k in zip(self.encoder.parameters(), self.encoder_k.parameters()):
@@ -333,6 +335,9 @@ class MoBY(nn.Module):
 		pred_1 = F.normalize(pred_1, dim=1)
 
 		feat_2 = self.encoder(im_2)
+		embed_2=self.adaptor(torch.squeeze(feat_2))
+		# embed_22=self.en_adaptor(embed_2)
+
 		proj_2 = self.projector(torch.squeeze(feat_2))
 		pred_2 = self.predictor(proj_2)
 		pred_2 = F.normalize(pred_2, dim=1)
@@ -364,25 +369,27 @@ class MoBY(nn.Module):
 			la_ctr_loss=0
 			valid_class=0
 			proto_list=[]
-			self.classifier.eval()
-			self.encoder.eval()
-			scores=self.classifier(feat_2)
-			_, class_preds = torch.max(scores.data, 1)
-			valid_mask=(class_preds==targets)
-			self.classifier.train()
-			self.encoder.train()
+			# self.classifier.eval()
+			# self.encoder.eval()
+			# scores=self.classifier(feat_2)
+			# _, class_preds = torch.max(scores.data, 1)
+			# valid_mask=(class_preds==targets)
+			# self.classifier.train()
+			# self.encoder.train()
+			appear_classes=[]
 			for i in range(self.num_classes):
 				cls_mask=(targets==i)
 				if(torch.sum(cls_mask).item()==0):continue
-				cls_pred_1=feat_1[cls_mask].squeeze(-1).squeeze(-1)
+				cls_pred_1=embed_2[cls_mask].squeeze(-1).squeeze(-1)
 				# cls_proto=torch.mean(cls_pred_1,dim=0)
 				proto_list.append(cls_pred_1)
+				appear_classes.append(i)
 				valid_class=valid_class+1
 
-			for i in range(self.num_classes):
-				cls_mask=(targets==i)
-				if(torch.sum(cls_mask).item()==0):continue
-				cls_pred_1=feat_1[cls_mask].squeeze(-1).squeeze(-1)
+			for i in range(len(appear_classes)):
+				# cls_mask=(targets==appear_classes[i])
+				cls_mask=(targets==appear_classes[i])
+				cls_pred_1=embed_2[cls_mask].squeeze(-1).squeeze(-1)
 				bs=cls_pred_1.shape[0]
 				# query=torch.mean(cls_pred_1,dim=0)
 				query=cls_pred_1
@@ -395,13 +402,14 @@ class MoBY(nn.Module):
 				# pos_logit=torch.sum(cls_pred_1*pos_keys.T, dim=1, keepdim=True)
 				# pos_logit=query.unsqueeze(1)*pos_keys
 				neg_logit=0
-				all_classes=[m for m in range(self.num_classes)]
-				all_classes.remove(i)
-				neg_classes=all_classes.copy()
-				neg_feat_list=[]
-				for neg_class in neg_classes:
+				# all_classes=[m for m in range(self.num_classes)]
+				# all_classes=appear_classes.copy()
+				# all_classes.remove(i)
+				# neg_classes=all_classes.copy()
+				neg_feat_list=proto_list[:i]+proto_list[i+1:]
+				# for neg_class in neg_classes:
 					# neg_feat_list.append(eval('self.cls_queue2_'+str(neg_class))[:,:128].clone().detach())
-					neg_feat_list.append(proto_list[neg_class])
+					# neg_feat_list.append(proto_list[neg_class])
 					# neg_feat_list.append(eval('self.cls_queue1_'+str(neg_class))[:,:64].clone().detach())
 					# neg_keys=eval('self.cls_queue1_'+str(neg_class)).clone().detach()
 					# neg_keys=eval('self.cls_queue2_'+str(neg_class)).clone().detach()    
@@ -426,6 +434,6 @@ class MoBY(nn.Module):
 			# ctr_loss=0
 			# loss=(un_ctr_loss+ctr_loss)/2
 			# loss=un_ctr_loss
-			self._dequeue_and_enqueue_label(pred_1,pred_2,targets,valid_mask)
+			# self._dequeue_and_enqueue_label(pred_1,pred_2,targets,valid_mask)
 			self._dequeue_and_enqueue(proj_1_ng, proj_2_ng)
 			return un_ctr_loss,la_ctr_loss,feat_2,None
