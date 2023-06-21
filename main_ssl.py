@@ -26,6 +26,7 @@ from load_dataset import load_dataset
 from selection_methods import query_samples
 # from config import *
 from sampler import SubsetSequentialSampler
+import wandb
 
 # sys.path.append("./")
 
@@ -53,6 +54,7 @@ parser.add_argument("-la","--learner_architecture", type=str, default="resnet18"
                     help="")
 parser.add_argument("-b","--batch", type=int, default=128,
                     help="Batch size used for training")
+parser.add_argument('--use_wandb', '-w', default = False,action=argparse.BooleanOptionalAction,help = 'use wandb to log training info')
 args = parser.parse_args()
 
 ##
@@ -82,8 +84,10 @@ if __name__ == '__main__':
     method_type: 'Random', 'CoreSet', 'mobyv2al'
     '''
 
-    results = open('results_'+str(args.method_type)+"_"+args.dataset +'_main'+str(args.cycles)+
+    results = open('results/results_'+str(args.method_type)+"_"+args.dataset +'_main'+str(args.cycles)+
                     str(args.total)+'told_resnet.txt','w')
+    experiment_name=str(args.method_type)+"_"+args.dataset +'_'+'baseline'
+
     print("Dataset: %s"%args.dataset)
     print("Method type:%s"%method)
     if args.total:
@@ -94,7 +98,12 @@ if __name__ == '__main__':
 
     # print(args.visual_transformer)
     for trial in range(TRIALS):
-
+        if args.use_wandb:
+            wandb.init(project="Classification-Active-Learning",
+                        group=experiment_name,
+                        name=str(trial),
+                        entity='ssl-online',
+                        reinit=True) 
         # Load training and testing dataset
         data_train, data_unlabeled, data_test, NO_CLASSES, no_train, data_train2, data_unlabeled2 = load_dataset(args.dataset, args.ssl)
                 
@@ -326,7 +335,8 @@ if __name__ == '__main__':
             print('Trial {}/{} || Cycle {}/{} || Label set size {}: Test acc {}'.format(trial+1, TRIALS, cycle+1, CYCLES, len(labeled_set), acc))
             np.array([method, trial+1, TRIALS, cycle+1, CYCLES, len(labeled_set), acc]).tofile(results, sep=" ")
             results.write("\n")
-
+            if args.use_wandb:
+                wandb.log({'acc':acc/100,'round':cycle},step=cycle)
 
             if cycle == (CYCLES-1):
                 # Reached final training cycle
