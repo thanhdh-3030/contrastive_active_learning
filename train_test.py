@@ -480,13 +480,14 @@ def train_epoch_ssl3(models, method, criterion, optimizers, dataloaders,
 
 		# if (idx % 2 ==0) or (idx <= last_inter):
 		if (idx % 2 ==0):
-			contrastive_loss,l_contrastive_loss, features,_= models['backbone'](samples_a, samples_r,targets)
-			scores = models['classifier'](features)
-			target_loss = criterion(scores, targets)
+			contrastive_loss,l_contrastive_loss, features,weight= models['backbone'](samples_a, samples_r,targets)
+			feats = models['classifier'](features)
+			# scores=feats@weight.T
+			target_loss = criterion(feats, targets)
 			t_loss = (torch.sum(target_loss)) / target_loss.size(0)
 			# c_loss = (torch.sum(contrastive_loss)) / contrastive_loss.size(0)
 			c_loss=l_contrastive_loss
-			loss = t_loss + c_loss_gain*(contrastive_loss+l_contrastive_loss)
+			loss = t_loss + c_loss_gain*(contrastive_loss)+0.2*l_contrastive_loss
 			# loss.backward()
 			ce_loss_meter.update(t_loss.item(),target_loss.size(0))
 			un_ctr_loss_meter.update(contrastive_loss.item(),target_loss.size(0))
@@ -532,7 +533,7 @@ def train_with_ssl2(models, method, criterion, optimizers, schedulers, dataloade
 		schedulers['classifier'].step(loss)
 		schedulers['backbone'].step(loss)
 
-		if True and epoch % 10  == 1:
+		if True and epoch % 2  == 1:
 			# acc = test_with_ssl(models, epoch, method, dataloaders, args, mode='test')
 			# print(loss.item())
 			# if epoch == 1:

@@ -189,7 +189,7 @@ class MoBY(nn.Module):
 		self.adapter = MoBYMLP(in_dim=self.encoder.num_features, num_layers=proj_num_layers)
 		self.adapter_k = MoBYMLP(in_dim=self.encoder.num_features, num_layers=proj_num_layers)
 		self.predictor = MoBYMLP(in_dim=128,num_layers=pred_num_layers)
-
+		self.predictor_l = MoBYMLP(in_dim=128,num_layers=pred_num_layers)
 		for param_q, param_k in zip(self.encoder.parameters(), self.encoder_k.parameters()):
 			param_k.data.copy_(param_q.data)  # initialize
 			param_k.requires_grad = False  # not update by gradient
@@ -222,11 +222,11 @@ class MoBY(nn.Module):
 
 		self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
 		for i in range(self.num_classes):
-			self.register_buffer("cls_queue"+str(i), torch.randn(128, self.contrast_num_positive))
-			# self.register_buffer("cls_queue2_"+str(i), torch.randn(128, self.contrast_num_positive))
+			self.register_buffer("cls_queue1_"+str(i), torch.randn(128, self.contrast_num_positive))
+			self.register_buffer("cls_queue2_"+str(i), torch.randn(128, self.contrast_num_positive))
 			self.register_buffer("cls_queue_ptr"+str(i),torch.zeros(1,dtype=torch.long))
-			exec("self.cls_queue"+str(i) + '=' + 'nn.functional.normalize(' + "self.cls_queue"+str(i) + ',dim=0)')
-			# exec("self.cls_queue2_"+str(i) + '=' + 'nn.functional.normalize(' + "self.cls_queue2_"+str(i) + ',dim=0)')
+			exec("self.cls_queue1_"+str(i) + '=' + 'nn.functional.normalize(' + "self.cls_queue1_"+str(i) + ',dim=0)')
+			exec("self.cls_queue2_"+str(i) + '=' + 'nn.functional.normalize(' + "self.cls_queue2_"+str(i) + ',dim=0)')
 
 	@torch.no_grad()
 	def _momentum_update_key_encoder(self):
@@ -263,7 +263,7 @@ class MoBY(nn.Module):
 
 		self.queue_ptr[0] = ptr
 	@torch.no_grad()
-	def _dequeue_and_enqueue_label(self, keys,labels):
+	def _dequeue_and_enqueue_label(self, keys1,keys2,labels):
 		# gather keys before updating queue
 		# keys1 = dist_collect(keys1)
 		# keys2 = dist_collect(keys2)
@@ -271,25 +271,25 @@ class MoBY(nn.Module):
 			# cls_mask=torch.logical_and(labels==i,valid_mask)
 			cls_mask=(labels==i)
 			if(torch.sum(cls_mask).item()==0):continue
-			this_keys1=keys[cls_mask]
+			this_keys1=keys1[cls_mask]
 			# print(this_keys1.shape)
-			# this_keys2=keys2[cls_mask]
+			this_keys2=keys2[cls_mask]
 			batch_size=this_keys1.shape[0]
 			this_ptr = int(eval('self.cls_queue_ptr'+str(i)))
 			if(this_ptr+batch_size)<=self.contrast_num_positive:
 				# replace the keys at ptr (dequeue and enqueue)
-				eval("self.cls_queue"+str(i))[:,this_ptr:this_ptr + batch_size]=this_keys1.T
-				# eval("self.cls_queue2_"+str(i))[:,this_ptr:this_ptr + batch_size]=this_keys2.T
+				eval("self.cls_queue1_"+str(i))[:,this_ptr:this_ptr + batch_size]=this_keys1.T
+				eval("self.cls_queue2_"+str(i))[:,this_ptr:this_ptr + batch_size]=this_keys2.T
 			else:
 				inx=self.contrast_num_positive-this_ptr
 				head_keys1=this_keys1[:inx]
 				tail_keys1=this_keys1[inx:]
-				# head_keys2=this_keys2[:inx]
-				# tail_keys2=this_keys2[inx:]
-				eval("self.cls_queue"+str(i))[:,this_ptr:]=head_keys1.T
-				eval("self.cls_queue"+str(i))[:,:len(tail_keys1)]=tail_keys1.T
-				# eval("self.cls_queue2_"+str(i))[:,this_ptr:]=head_keys2.T
-				# eval("self.cls_queue2_"+str(i))[:,:len(tail_keys1)]=tail_keys2.T
+				head_keys2=this_keys2[:inx]
+				tail_keys2=this_keys2[inx:]
+				eval("self.cls_queue1_"+str(i))[:,this_ptr:]=head_keys1.T
+				eval("self.cls_queue1_"+str(i))[:,:len(tail_keys1)]=tail_keys1.T
+				eval("self.cls_queue2_"+str(i))[:,this_ptr:]=head_keys2.T
+				eval("self.cls_queue2_"+str(i))[:,:len(tail_keys1)]=tail_keys2.T
 			eval("self.cls_queue_ptr"+str(i))[0]=(this_ptr + batch_size) % self.contrast_num_positive # move pointer
 
 	def contrastive_loss(self, q, k, queue):
@@ -340,11 +340,14 @@ class MoBY(nn.Module):
 		proj_1 = self.projector(torch.squeeze(feat_1))
 		pred_1 = self.predictor(proj_1)
 		pred_1 = F.normalize(pred_1, dim=1)
+		adapt_1=self.adapter(torch.squeeze(feat_1))
+		embed_1=self.predictor_l(adapt_1)
+		embed_1= F.normalize(embed_1, dim=1)
 
 		feat_2 = self.encoder(im_2)
-		embed_2=self.adapter(torch.squeeze(feat_2))
-		# embed_22=self.en_adapter(embed_2)
-
+		adapt_2=self.adapter(torch.squeeze(feat_2))
+		embed_2=self.predictor_l(adapt_2)
+		embed_2= F.normalize(embed_2, dim=1)
 		proj_2 = self.projector(torch.squeeze(feat_2))
 		pred_2 = self.predictor(proj_2)
 		pred_2 = F.normalize(pred_2, dim=1)
@@ -358,11 +361,12 @@ class MoBY(nn.Module):
 			feat_1_ng = self.encoder_k(im_1)  # keys: NxC
 			proj_1_ng = self.projector_k(feat_1_ng)
 			proj_1_ng = F.normalize(proj_1_ng, dim=1)
+			embed_1_ng=self.adapter_k(feat_1_ng)
+			embed_1_ng = F.normalize(embed_1_ng, dim=1)
 
 			feat_2_ng = self.encoder_k(im_2)
 			proj_2_ng = self.projector_k(feat_2_ng)
 			proj_2_ng = F.normalize(proj_2_ng, dim=1)
-
 			embed_2_ng=self.adapter_k(feat_2_ng)
 			embed_2_ng = F.normalize(embed_2_ng, dim=1)
 
@@ -398,11 +402,17 @@ class MoBY(nn.Module):
 
 			for i in range(len(appear_classes)):
 				cls_mask=(targets==appear_classes[i])
-				cls_pred_1=embed_2[cls_mask].squeeze(-1).squeeze(-1)
+				cls_pred_1=embed_1[cls_mask].squeeze(-1).squeeze(-1)
+				cls_pred_2=embed_2[cls_mask].squeeze(-1).squeeze(-1)
+
 				bs=cls_pred_1.shape[0]
-				query=cls_pred_1
+				query1=cls_pred_1
+				query2=cls_pred_2
+
 				# pos_keys=torch.mean(proto_list[i],dim=0).repeat(bs,1)
-				pos_keys=torch.mean(eval('self.cls_queue'+str(i)).clone().detach(),dim=1).T.repeat(bs,1)
+				pos_keys2=torch.mean(eval('self.cls_queue2_'+str(i)).clone().detach(),dim=1).T.repeat(bs,1)
+				pos_keys1=torch.mean(eval('self.cls_queue1_'+str(i)).clone().detach(),dim=1).T.repeat(bs,1)
+
 				# pos_keys=eval('self.cls_queue1_'+str(i))[:,:bs].clone().detach().T
 				# pos_logit=torch.sum(cls_pred_1*pos_keys.T, dim=1, keepdim=True)
 				# pos_logit=query.unsqueeze(1)*pos_keys
@@ -411,31 +421,47 @@ class MoBY(nn.Module):
 				all_classes=appear_classes.copy()
 				all_classes.remove(appear_classes[i])
 				neg_classes=all_classes.copy()
-				neg_feat_list=[]
+				neg_feat_list1=[]
+				neg_feat_list2=[]
 				# neg_feat_list=proto_list[:i]+proto_list[i+1:]
 				for neg_class in neg_classes:
 					# neg_feat_list.append(eval('self.cls_queue2_'+str(neg_class))[:,:128].clone().detach())
 					# neg_feat_list.append(proto_list[neg_class])
-					neg_feat_list.append(eval('self.cls_queue'+str(neg_class)).clone().detach())
+					neg_feat_list2.append(eval('self.cls_queue2_'+str(neg_class)).clone().detach())
+					neg_feat_list1.append(eval('self.cls_queue1_'+str(neg_class)).clone().detach())
 					# neg_keys=eval('self.cls_queue1_'+str(neg_class)).clone().detach()
 					# neg_keys=eval('self.cls_queue2_'+str(neg_class)).clone().detach()                                 
-				neg_feats=torch.cat(neg_feat_list,dim=1)
+				neg_feats2=torch.cat(neg_feat_list2,dim=1)
+				neg_feats1=torch.cat(neg_feat_list1,dim=1)
+
 				# neg_feats=neg_feats.T.repeat(bs,1,1)
 				# all_feats=torch.cat((pos_keys.T.unsqueeze(1),neg_feats),dim=1)
 				# la_ctr_loss += self.contrastive_loss(cls_pred_1,pos_keys,neg_feats)
 				# la_ctr_loss += F.cross_entropy(logits/self.contrast_temperature,torch.zeros(bs).long().cuda())
-				query=F.normalize(query,dim=1)
-				pos_keys=F.normalize(pos_keys,dim=1)
-				neg_keys=F.normalize(neg_feats,dim=0)
-				la_ctr_loss += self.contrastive_loss(query, pos_keys,neg_keys)
+				query1=F.normalize(query1,dim=1)
+				pos_keys2=F.normalize(pos_keys2,dim=1)
+				neg_keys2=F.normalize(neg_feats2,dim=0)
+
+				query2=F.normalize(query2,dim=1)
+				pos_keys1=F.normalize(pos_keys1,dim=1)
+				neg_keys1=F.normalize(neg_feats1,dim=0)
+				# la_ctr_loss = la_ctr_loss+self.contrastive_loss(query1, pos_keys2,neg_keys2)+self.contrastive_loss(query2, pos_keys1,neg_keys1)
+				# la_ctr_loss = la_ctr_loss+self.contrastive_loss(query2, pos_keys2,neg_keys2)+self.contrastive_loss(query1, pos_keys1,neg_keys1)
+				la_ctr_loss = la_ctr_loss+self.contrastive_loss(query2, pos_keys2,neg_keys2)
 				# # ctr_loss=self.contrastive_loss_q(query,pos_keys)
 				# ctr_loss +=self._compute_contrast_loss(pos_logit,neg_logit)
 				# valid_class=valid_class+1
+			list_all_features=[]
+			for i in range(self.num_classes):
+				list_all_features.append(eval('self.cls_queue2_'+str(i)).clone().detach())
+			all_features=torch.stack(list_all_features)
+			weight=torch.sum(all_features,dim=-1)
+			weight=F.normalize(weight,dim=1)
 
 			la_ctr_loss=la_ctr_loss/valid_class
 			# ctr_loss=0
 			# loss=(un_ctr_loss+ctr_loss)/2
 			# loss=un_ctr_loss
 			self._dequeue_and_enqueue(proj_1_ng, proj_2_ng)
-			self._dequeue_and_enqueue_label(embed_2_ng,targets)
-			return un_ctr_loss,la_ctr_loss,feat_2,None
+			self._dequeue_and_enqueue_label(embed_1_ng,embed_2_ng,targets)
+			return un_ctr_loss,la_ctr_loss,feat_2,weight

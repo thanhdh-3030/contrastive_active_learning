@@ -86,7 +86,7 @@ if __name__ == '__main__':
 
     # results = open('results/results_'+str(args.method_type)+"_"+args.dataset +'_main'+str(args.cycles)+
     #                 str(args.total)+'told_resnet.txt','w')
-    experiment_name=str(args.method_type)+"_"+args.dataset +'ctr_mb'
+    experiment_name=str(args.method_type)+"_"+args.dataset +'ctr_mb_0.2lctr_0.4ctr'
 
     print("Dataset: %s"%args.dataset)
     print("Method type:%s"%method)
@@ -261,7 +261,9 @@ if __name__ == '__main__':
                         classifier = resnet.ResNetC(dim_latent, num_classes=NO_CLASSES).cuda()
                     else:
                         dim_latent = 512
+                        # classifier = resnet.ResNetC(dim_latent, num_classes=NO_CLASSES).cuda()
                         classifier = resnet.ResNetC(dim_latent, num_classes=NO_CLASSES).cuda()
+
                 else:
                     if args.learner_architecture == "vgg16":
                         model = resnet.dnn_16(NO_CLASSES).cuda()
